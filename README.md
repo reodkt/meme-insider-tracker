@@ -1,14 +1,15 @@
 # Meme Insider Tracker
 
-> Deteksi real-time aktivitas insider & whale di meme coin — semua chain, 100% gratis.
+> Real-time insider trade detection for meme coins across **all major chains** — 100% free.
 
-Bosan kena rug pull? Tool ini otomatis memindai meme coin baru dan mendeteksi pola insider sebelum kamu jadi exit liquidity mereka.
+Tired of getting rugged? This tool automatically scans new meme coins and detects insider patterns before you become their exit liquidity.
 
-**Live Demo:** [meme-insider-tracker.streamlit.app](https://meme-insider-tracker.streamlit.app) *(deploy sendiri via Streamlit Cloud)*
+**Live App:** [memetracker.streamlit.app](https://memetracker.streamlit.app)
 
 ---
 
 ## Supported Chains
+
 | Chain | Status |
 |-------|--------|
 | Ethereum | OK |
@@ -19,59 +20,51 @@ Bosan kena rug pull? Tool ini otomatis memindai meme coin baru dan mendeteksi po
 | Avalanche | OK |
 | Solana | OK |
 
-## Fitur Deteksi
+## Detection Methods
 
-| Deteksi | Chain | Penjelasan |
-|---------|-------|------------|
-| **Sniper Awal** | EVM | Wallet yang beli di block pertama — kemungkinan bot/insider |
-| **Dev Pegang Banyak** | EVM | Developer masih hold % besar supply — risiko rug pull |
-| **Grup Wallet** | EVM | Beberapa wallet didanai dari 1 sumber — koordinasi insider |
-| **Pembelian Bundel** | Solana | Banyak wallet beli dalam 1 transaksi — taktik sniping |
-| **Whale Dominan** | Semua | 1 wallet pegang >10% supply — bisa dump kapan saja |
-| **Pembeli Awal** | Solana | Wallet pertama yang beli token baru |
+| Detection | Chain | Description |
+|-----------|-------|-------------|
+| **Sniper (Early Buy)** | EVM | Wallets that bought in the very first block — likely bots or insiders |
+| **Dev Large Holding** | EVM | Developer still holds a large % of supply — rug pull risk |
+| **Wallet Cluster** | EVM | Multiple wallets funded by the same source — coordinated insiders |
+| **Bundled Buy** | Solana | Many wallets bought in a single transaction — sniping tactic |
+| **Whale Dominance** | All | One wallet holds >10% of supply — can dump anytime |
+| **Early Buyer** | Solana | First wallets to buy a new token |
 
-## Dashboard Web
+## Dashboard
 
-| Tab | Fungsi |
-|-----|--------|
-| **Aktivitas Insider** | Daftar semua event mencurigakan + chart distribusi |
-| **Token Terpantau** | Semua meme coin yang ditemukan (harga, likuiditas, market cap) |
-| **Grup Wallet** | Wallet cluster dari 1 pendana — indikasi koordinasi |
-| **Scan & Analisis** | Scan manual + cek token spesifik dengan 1 klik |
+| Tab | Function |
+|-----|----------|
+| **Tokens** | All discovered meme coins (price, liquidity, market cap, volume) |
+| **Insider Activity** | Detected suspicious events with full details |
+| **Wallet Clusters** | Groups of wallets linked to the same funder |
+| **Scan & Analyze** | Manual keyword search + analyze any token by address |
 
 ## Quick Start
 
-### 1. Install
 ```bash
 git clone https://github.com/reodkt/meme-insider-tracker.git
 cd meme-insider-tracker
 pip install -r requirements.txt
+streamlit run streamlit_app.py
 ```
 
-### 2. Jalankan Dashboard
-```bash
-streamlit run dashboard/app.py
-```
-Buka http://localhost:8501
+Open http://localhost:8501
 
-### 3. Atau Jalankan Scanner (Terminal mode)
-```bash
-python scanner.py
-```
+## Deploy Online (Free)
 
-## Deploy Online (Gratis)
-
-1. Fork / push repo ini ke GitHub kamu
-2. Buka [share.streamlit.io](https://share.streamlit.io)
-3. Pilih repo, branch `master`, main file `dashboard/app.py`
-4. Klik Deploy — selesai!
+1. Fork this repo to your GitHub
+2. Go to [share.streamlit.io](https://share.streamlit.io)
+3. Select repo, branch `master`, main file `streamlit_app.py`
+4. Click Deploy — done!
 
 ## Project Structure
+
 ```
 meme-insider-tracker/
-├── scanner.py              # Scanner loop (terminal)
+├── streamlit_app.py        # Main web app (Streamlit)
+├── scanner.py              # CLI scanner (terminal mode)
 ├── requirements.txt
-├── .streamlit/config.toml  # Theme config
 ├── core/
 │   ├── config.py           # RPC endpoints & thresholds
 │   └── database.py         # SQLite storage
@@ -82,53 +75,55 @@ meme-insider-tracker/
 ├── analyzers/
 │   └── insider_detector.py # Insider detection engine
 └── dashboard/
-    └── app.py              # Streamlit web dashboard
+    └── app.py              # Dashboard (alternative entry)
 ```
 
-## Konfigurasi
+## Configuration
 
 Edit `core/config.py`:
 
 ```python
 INSIDER_CONFIG = {
-    "early_buyer_blocks": 10,        # block pertama = sniper
-    "whale_threshold_usd": 10_000,   # min USD untuk flag whale
-    "same_funder_min_wallets": 3,    # min wallet dari funder sama
-    "dev_sell_alert_pct": 10,        # alert jika dev hold >X%
-    "sniper_max_block_delay": 2,     # delay block = sniper
-    "min_liquidity_usd": 1_000,      # skip token kecil
-    "max_token_age_hours": 72,       # hanya track token baru
+    "early_buyer_blocks": 10,        # first N blocks = sniper
+    "whale_threshold_usd": 10_000,   # min USD to flag whale
+    "same_funder_min_wallets": 3,    # min wallets from same funder
+    "dev_sell_alert_pct": 10,        # alert if dev holds >X%
+    "sniper_max_block_delay": 2,     # block delay = sniper
+    "min_liquidity_usd": 1_000,      # skip dust tokens
+    "max_token_age_hours": 72,       # only track new tokens
 }
 ```
 
-## Cara Kerja
+## How It Works
 
-1. **Scan** — Dexscreener dicari dengan keyword meme (pepe, doge, bonk, dll)
-2. **Filter** — Hanya token dengan likuiditas cukup & umur < 72 jam
-3. **Analisis** — Cek on-chain: siapa beli pertama, siapa dev, ada cluster?
-4. **Alert** — Semua temuan disimpan dengan level bahaya (Tinggi/Waspada/Info)
-5. **Dashboard** — Visualisasi real-time di web
+1. **Scan** — Dexscreener is searched with meme keywords (pepe, doge, bonk, etc.)
+2. **Filter** — Only tokens with sufficient liquidity & age < 72h
+3. **Analyze** — On-chain check: who bought first, who's the dev, any clusters?
+4. **Alert** — Findings saved with severity levels (High / Medium / Low)
+5. **Dashboard** — Real-time visualization in the web app
 
 ---
 
-## ☕ Traktir Saya Kopi
+## ☕ Buy Me a Coffee
 
-Tool ini gratis & open-source. Kalau kamu merasa terbantu, bisa beliin saya kopi sebagai apresiasi:
+This tool is free & open-source. If it helped you, consider sending a small tip:
 
-| Network | Alamat |
-|---------|--------|
+| Network | Address |
+|---------|---------|
 | **Solana (SOL)** | `2vMBrEcTd85b1CUwcbU6f3PuKmdUCHkM8kq6mMVp82Ca` |
-| **Ethereum / EVM** | `0x2D36d2658B46C509Ecc9BB68D7844bb3ef9D337a` |
+| **ETH / BSC / Base / Arbitrum** | `0x2D36d2658B46C509Ecc9BB68D7844bb3ef9D337a` |
 
-Berapapun sangat berarti. Terima kasih, fren!
+Any amount is appreciated. Thank you, fren!
 
 ---
 
 ## Notes
-- Semua API **gratis & tanpa key** (Dexscreener + public RPCs)
-- Public RPC ada rate limit — scanner sudah include throttling
-- Untuk production, pertimbangkan RPC berbayar (Alchemy, Helius)
-- Ini tool **riset & analisis** — bukan saran finansial
+
+- All APIs are **free & keyless** (Dexscreener + public RPCs)
+- Public RPCs have rate limits — scanner includes built-in throttling
+- For production, consider paid RPCs (Alchemy, Helius)
+- This is a **research & analytics tool** — not financial advice
 
 ## License
+
 MIT

@@ -1,41 +1,55 @@
 """
-Meme Insider Tracker — Streamlit Web Dashboard
-Deteksi aktivitas insider pada meme coin di semua chain.
+Meme Insider Tracker — Real-time meme coin insider detection across all chains.
 """
 
 import streamlit as st
 import pandas as pd
 import json
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from core.database import init_db, get_recent_events, get_tracked_tokens, get_clusters, upsert_token, add_insider_event
+from core.database import init_db, get_recent_events, get_tracked_tokens, get_clusters, upsert_token
 from core.config import SUPPORTED_CHAINS, INSIDER_CONFIG
 from chains.dexscreener import scan_new_memes, search_meme_tokens
 from analyzers.insider_detector import analyze_token
 
-# ━━━━━━━━━━━━━━━━━━━ PAGE CONFIG ━━━━━━━━━━━━━━━━━━━
+# ── Page Config ──
 st.set_page_config(page_title="Meme Insider Tracker", page_icon="🔍", layout="wide")
 init_db()
 
-# ━━━━━━━━━━━━━━━━━━━ CONSTANTS ━━━━━━━━━━━━━━━━━━━
+# ── Responsive CSS ──
+st.markdown("""<style>
+@media (max-width: 768px) {
+    .block-container { padding: 1rem 0.5rem !important; }
+    [data-testid="stMetric"] { padding: 0.3rem !important; }
+    [data-testid="stMetric"] label { font-size: 0.7rem !important; }
+    [data-testid="stMetric"] [data-testid="stMetricValue"] { font-size: 1.2rem !important; }
+}
+[data-testid="stMetric"] {
+    background: #262730; border-radius: 10px; padding: 0.8rem;
+    border: 1px solid #3d3d5c;
+}
+</style>""", unsafe_allow_html=True)
+
+# ── Constants ──
 CHAIN_NAME = {
     "ethereum": "Ethereum", "bsc": "BSC", "base": "Base",
     "arbitrum": "Arbitrum", "polygon": "Polygon",
     "avalanche": "Avalanche", "solana": "Solana",
 }
 EVENT_NAME = {
-    "early_sniper": "🎯 Sniper Awal",
-    "dev_large_holding": "👨‍💻 Dev Pegang Banyak",
-    "wallet_cluster": "🕸️ Grup Wallet Mencurigakan",
-    "whale_holding": "🐋 Whale Dominan",
-    "early_buyer": "⚡ Pembeli Awal",
-    "bundled_buy": "📦 Pembelian Bundel",
+    "early_sniper": "Sniper (Early Buy)",
+    "dev_large_holding": "Dev Large Holding",
+    "wallet_cluster": "Wallet Cluster",
+    "whale_holding": "Whale Dominance",
+    "early_buyer": "Early Buyer",
+    "bundled_buy": "Bundled Buy",
 }
-SEVERITY_LABEL = {"high": "🔴 BAHAYA", "medium": "🟡 WASPADA", "low": "🟢 INFO"}
+SEV_LABEL = {"high": "HIGH", "medium": "WARN", "low": "INFO"}
+SEV_ICON = {"high": "🔴", "medium": "🟡", "low": "🟢"}
 
 
 def fmt_usd(val):
@@ -54,22 +68,18 @@ def fmt_addr(addr):
     return f"{addr[:6]}...{addr[-4:]}"
 
 
-# ━━━━━━━━━━━━━━━━━━━ AUTO-SCAN ON FIRST LOAD ━━━━━━━━━━━━━━━━━━━
-# Otomatis scan saat pertama kali web dibuka supaya ada data
+# ── Auto-Scan on First Load ──
+if "loaded" not in st.session_state:
+    st.session_state.loaded = False
 
-if "first_scan_done" not in st.session_state:
-    st.session_state.first_scan_done = False
-    st.session_state.scan_results = []
-    st.session_state.analysis_results = []
-
-if not st.session_state.first_scan_done:
-    with st.spinner("⏳ Memuat data meme coin terbaru dari semua chain... (hanya sekali saat pertama buka)"):
+if not st.session_state.loaded:
+    with st.spinner("Loading latest meme coins from all chains..."):
         try:
-            tokens_found = scan_new_memes(queries=[
+            found = scan_new_memes(queries=[
                 "meme", "pepe", "doge", "bonk", "moon",
                 "shib", "floki", "trump", "ai", "cat",
             ])
-            for t in tokens_found:
+            for t in found:
                 try:
                     upsert_token(
                         chain=t["chain"], address=t["token_address"],
@@ -85,248 +95,183 @@ if not st.session_state.first_scan_done:
                 except Exception:
                     pass
 
-            # Analyze top EVM tokens for insider activity (skip Solana on auto to avoid rate limit)
-            analysis_results = []
-            evm_chains = {"ethereum", "bsc", "base", "arbitrum", "polygon", "avalanche"}
-            evm_tokens = [t for t in tokens_found if t.get("chain") in evm_chains]
-            sorted_tokens = sorted(evm_tokens, key=lambda x: x.get("liquidity_usd", 0), reverse=True)
-            for t in sorted_tokens[:5]:
+            evm_set = {"ethereum", "bsc", "base", "arbitrum", "polygon", "avalanche"}
+            evm = sorted(
+                [t for t in found if t.get("chain") in evm_set],
+                key=lambda x: x.get("liquidity_usd", 0), reverse=True,
+            )
+            for t in evm[:5]:
                 try:
-                    findings = analyze_token(t["chain"], t["token_address"], pair_data=t)
-                    if findings:
-                        for f in findings:
-                            f["token_symbol"] = t.get("symbol", "?")
-                            f["token_chain"] = t.get("chain", "")
-                        analysis_results.extend(findings)
+                    analyze_token(t["chain"], t["token_address"], pair_data=t)
                 except Exception:
                     pass
                 time.sleep(0.5)
+        except Exception:
+            pass
 
-            st.session_state.scan_results = tokens_found
-            st.session_state.analysis_results = analysis_results
-        except Exception as e:
-            st.session_state.scan_results = []
-            st.session_state.analysis_results = []
-
-    st.session_state.first_scan_done = True
+    st.session_state.loaded = True
     st.rerun()
 
 
-# ━━━━━━━━━━━━━━━━━━━ CSS (minimal, clean) ━━━━━━━━━━━━━━━━━━━
-st.markdown("""
-<style>
-.donate-box {
-    background: linear-gradient(135deg, #1e1b4b, #312e81, #1e1b4b);
-    border: 2px solid #6366f1; border-radius: 16px;
-    padding: 2rem; text-align: center; margin: 1rem 0;
-}
-.donate-box h2 { color: #a5b4fc; margin: 0.5rem 0; }
-.donate-box p { color: #c7d2fe; }
-.wallet-box {
-    background: #0f172a; border: 1px solid #334155;
-    border-radius: 10px; padding: 1rem; margin: 0.6rem auto;
-    max-width: 550px; text-align: left;
-}
-.wallet-box .label { color: #94a3b8; font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; }
-.wallet-box code {
-    color: #e2e8f0; font-size: 0.85rem; word-break: break-all;
-    background: #1e293b; padding: 6px 10px; border-radius: 6px;
-    display: block; margin-top: 4px; user-select: all; cursor: pointer;
-}
-</style>
-""", unsafe_allow_html=True)
-
-
-# ━━━━━━━━━━━━━━━━━━━ SIDEBAR ━━━━━━━━━━━━━━━━━━━
+# ── Sidebar ──
 with st.sidebar:
     st.title("🔍 Meme Insider Tracker")
-    st.caption("Deteksi insider trade meme coin")
-
+    st.caption("Real-time insider detection for meme coins")
     st.divider()
 
-    st.subheader("Filter")
+    st.subheader("Filters")
     sel_chain = st.selectbox(
         "Chain",
-        ["Semua"] + SUPPORTED_CHAINS,
-        format_func=lambda x: "🌐 Semua Chain" if x == "Semua" else CHAIN_NAME.get(x, x),
+        ["All"] + SUPPORTED_CHAINS,
+        format_func=lambda x: "All Chains" if x == "All" else CHAIN_NAME.get(x, x),
     )
-    sel_severity = st.selectbox(
-        "Level Bahaya",
-        ["Semua", "high", "medium", "low"],
-        format_func=lambda x: {"Semua": "Semua Level", "high": "🔴 Bahaya", "medium": "🟡 Waspada", "low": "🟢 Info"}.get(x, x),
+    sel_sev = st.selectbox(
+        "Severity",
+        ["All", "high", "medium", "low"],
+        format_func=lambda x: {"All": "All Levels", "high": "🔴 High", "medium": "🟡 Medium", "low": "🟢 Low"}.get(x, x),
     )
 
     st.divider()
 
-    if st.button("🔄 Scan Ulang Sekarang", use_container_width=True, type="primary"):
-        st.session_state.first_scan_done = False
+    if st.button("🔄 Rescan Now", use_container_width=True, type="primary"):
+        st.session_state.loaded = False
         st.rerun()
 
-    auto = st.toggle("Auto-refresh tiap 30 detik")
+    auto = st.toggle("Auto-refresh (30s)")
 
     st.divider()
-    st.caption("v1.0 • Gratis • Tanpa API Key")
+    st.caption("v1.0 · Free · No API Key")
     st.caption("Data: Dexscreener + On-chain RPC")
 
 if auto:
     time.sleep(30)
-    st.session_state.first_scan_done = False
+    st.session_state.loaded = False
     st.rerun()
 
 
-# ━━━━━━━━━━━━━━━━━━━ LOAD DATA ━━━━━━━━━━━━━━━━━━━
-chain_f = sel_chain if sel_chain != "Semua" else None
-sev_f = sel_severity if sel_severity != "Semua" else None
-events = get_recent_events(limit=200, chain=chain_f, severity=sev_f)
-tokens = get_tracked_tokens(limit=300, chain=chain_f)
-clusters = get_clusters(limit=50, chain=chain_f)
+# ── Load Data ──
+cf = sel_chain if sel_chain != "All" else None
+sf = sel_sev if sel_sev != "All" else None
+events = get_recent_events(limit=200, chain=cf, severity=sf)
+tokens = get_tracked_tokens(limit=300, chain=cf)
+clusters = get_clusters(limit=50, chain=cf)
 
 
-# ━━━━━━━━━━━━━━━━━━━ HEADER ━━━━━━━━━━━━━━━━━━━
+# ── Header ──
 st.title("🔍 Meme Insider Tracker")
-st.markdown("**Deteksi otomatis aktivitas insider & whale di meme coin — 7 chain, real-time, 100% gratis.**")
+st.markdown("Automatic insider & whale detection for meme coins — **7 chains, real-time, 100% free.**")
 
-# ━━━━━━━━━━━━━━━━━━━ METRICS ━━━━━━━━━━━━━━━━━━━
-high_count = len([e for e in events if e.get("severity") == "high"])
+# ── Metrics ──
+high_ct = len([e for e in events if e.get("severity") == "high"])
 c1, c2, c3, c4 = st.columns(4)
-c1.metric("🪙 Token Terpantau", len(tokens))
-c2.metric("🚨 Event Insider", len(events))
-c3.metric("🔴 Bahaya Tinggi", high_count)
-c4.metric("🕸️ Grup Wallet", len(clusters))
+c1.metric("Tokens Tracked", len(tokens))
+c2.metric("Insider Events", len(events))
+c3.metric("High Alerts", high_ct)
+c4.metric("Wallet Clusters", len(clusters))
 
-
-# ━━━━━━━━━━━━━━━━━━━ TABS ━━━━━━━━━━━━━━━━━━━
+# ── Tabs ──
 tab1, tab2, tab3, tab4 = st.tabs([
-    "📊 Token Terpantau",
-    "🚨 Aktivitas Insider",
-    "🕸️ Grup Wallet",
-    "⚡ Scan Manual",
+    "📊 Tokens", "🚨 Insider Activity", "🕸️ Wallet Clusters", "⚡ Scan & Analyze",
 ])
 
 
-# ━━━━━━━━━━━━━ TAB 1: TOKEN LIST ━━━━━━━━━━━━━
+# ── TAB 1: Tokens ──
 with tab1:
-    st.subheader("📊 Daftar Meme Coin yang Ditemukan")
-    st.caption("Data langsung dari Dexscreener — diperbarui setiap kali scan")
+    st.subheader("Tracked Meme Coins")
+    st.caption("Live data from Dexscreener — refreshed on every scan")
 
     if tokens:
         rows = []
         for t in tokens:
+            price = t.get("price_usd", 0)
             rows.append({
                 "Chain": CHAIN_NAME.get(t.get("chain", ""), t.get("chain", "")),
-                "Simbol": t.get("symbol", "-"),
-                "Nama": t.get("name", "-"),
-                "Harga": f"${t['price_usd']:,.8f}" if t.get("price_usd") and t["price_usd"] < 0.01
-                         else f"${t['price_usd']:,.4f}" if t.get("price_usd") and t["price_usd"] < 1
-                         else f"${t['price_usd']:,.2f}" if t.get("price_usd")
-                         else "-",
+                "Symbol": t.get("symbol", "-"),
+                "Name": t.get("name", "-"),
+                "Price": f"${price:,.8f}" if price and price < 0.01
+                         else f"${price:,.4f}" if price and price < 1
+                         else f"${price:,.2f}" if price else "-",
                 "Market Cap": fmt_usd(t.get("market_cap")),
-                "Likuiditas": fmt_usd(t.get("liquidity_usd")),
-                "Volume 24j": fmt_usd(t.get("volume_24h")),
+                "Liquidity": fmt_usd(t.get("liquidity_usd")),
+                "Vol 24h": fmt_usd(t.get("volume_24h")),
                 "DEX": t.get("dex", "-"),
-                "Update": t.get("last_updated", "-"),
             })
-
-        df = pd.DataFrame(rows)
-        st.dataframe(df, use_container_width=True, height=500, hide_index=True)
-        st.info(f"Total: **{len(tokens)}** token ditemukan di **{len(set(t.get('chain','') for t in tokens))}** chain berbeda")
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, height=480, hide_index=True)
+        st.caption(f"Showing {len(tokens)} tokens across {len(set(t.get('chain','') for t in tokens))} chains")
     else:
-        st.warning("Belum ada data token. Klik **Scan Ulang Sekarang** di sidebar.")
+        st.info("No tokens found yet. Click **Rescan Now** in the sidebar.")
 
 
-# ━━━━━━━━━━━━━ TAB 2: INSIDER EVENTS ━━━━━━━━━━━━━
+# ── TAB 2: Insider Events ──
 with tab2:
-    st.subheader("🚨 Aktivitas Insider Terdeteksi")
-    st.caption("Pola mencurigakan yang ditemukan dari analisis on-chain")
+    st.subheader("Insider Activity Detected")
+    st.caption("Suspicious on-chain patterns found by the analyzer")
 
     if events:
         for ev in events:
             sev = ev.get("severity", "low")
+            icon = SEV_ICON.get(sev, "")
             ev_type = EVENT_NAME.get(ev.get("event_type", ""), ev.get("event_type", ""))
             chain = CHAIN_NAME.get(ev.get("chain", ""), ev.get("chain", ""))
-            waktu = ev.get("detected_at", "")
+            when = ev.get("detected_at", "")
 
-            # Parse details
             details = {}
             try:
                 details = json.loads(ev.get("details", "{}"))
             except Exception:
                 pass
 
-            # Build description
-            desc_parts = []
+            desc = []
             if details.get("balance_pct"):
-                desc_parts.append(f"Memegang **{details['balance_pct']:.1f}%** dari total supply")
+                desc.append(f"Holds **{details['balance_pct']:.1f}%** of total supply")
             if details.get("bundle_size"):
-                desc_parts.append(f"**{details['bundle_size']}** wallet beli dalam 1 transaksi")
+                desc.append(f"**{details['bundle_size']}** wallets in 1 transaction")
             if details.get("amount"):
-                desc_parts.append(f"Jumlah: **{details['amount']:,.0f}** token")
-            if details.get("block"):
-                desc_parts.append(f"Block: #{details['block']}")
-            if details.get("slot"):
-                desc_parts.append(f"Slot: #{details['slot']}")
+                desc.append(f"Amount: **{details['amount']:,.0f}** tokens")
 
-            detail_str = " • ".join(desc_parts) if desc_parts else ""
-
-            # Display as expander
-            label = f"{SEVERITY_LABEL.get(sev, sev)} | {chain} | {ev_type}"
+            label = f"{icon} {SEV_LABEL.get(sev, sev)} | {chain} | {ev_type}"
             with st.expander(label, expanded=(sev == "high")):
-                col_a, col_b = st.columns([2, 1])
-                with col_a:
-                    st.markdown(f"**Jenis:** {ev_type}")
-                    st.markdown(f"**Chain:** {chain}")
-                    st.markdown(f"**Token:** `{ev.get('token_address', '-')}`")
-                    st.markdown(f"**Wallet:** `{ev.get('wallet_address', '-')}`")
-                    if detail_str:
-                        st.markdown(f"**Detail:** {detail_str}")
-                with col_b:
-                    st.markdown(f"**Waktu:** {waktu}")
-                    if ev.get("tx_hash"):
-                        st.markdown(f"**TX:** `{fmt_addr(ev['tx_hash'])}`")
-                    if ev.get("amount_usd"):
-                        st.markdown(f"**Nilai:** {fmt_usd(ev['amount_usd'])}")
+                st.markdown(f"**Type:** {ev_type}")
+                st.markdown(f"**Chain:** {chain}")
+                st.markdown(f"**Token:** `{ev.get('token_address', '-')}`")
+                st.markdown(f"**Wallet:** `{ev.get('wallet_address', '-')}`")
+                if desc:
+                    st.markdown(f"**Details:** {' · '.join(desc)}")
+                st.markdown(f"**Detected:** {when}")
 
-        # Stats
         st.divider()
-        st.subheader("📈 Ringkasan")
-        col_x, col_y = st.columns(2)
+        st.subheader("Summary")
         df_ev = pd.DataFrame(events)
-        with col_x:
+        ca, cb = st.columns(2)
+        with ca:
             if "event_type" in df_ev.columns:
-                st.markdown("**Jenis Event**")
-                counts = df_ev["event_type"].map(lambda x: EVENT_NAME.get(x, x)).value_counts()
-                st.bar_chart(counts)
-        with col_y:
+                st.markdown("**By Type**")
+                st.bar_chart(df_ev["event_type"].map(lambda x: EVENT_NAME.get(x, x)).value_counts())
+        with cb:
             if "chain" in df_ev.columns:
-                st.markdown("**Per Chain**")
-                counts = df_ev["chain"].map(lambda x: CHAIN_NAME.get(x, x)).value_counts()
-                st.bar_chart(counts)
-
+                st.markdown("**By Chain**")
+                st.bar_chart(df_ev["chain"].map(lambda x: CHAIN_NAME.get(x, x)).value_counts())
     else:
-        st.info(
-            "Belum ada aktivitas insider terdeteksi di scan terakhir. "
-            "Ini bisa berarti token yang ditemukan relatif bersih, atau coba scan ulang."
-        )
+        st.info("No insider activity detected in the latest scan. Tokens may be clean, or try scanning again.")
 
-    # Penjelasan istilah
     st.divider()
-    st.subheader("📖 Kamus Istilah")
+    st.subheader("Glossary")
     st.markdown("""
-| Istilah | Arti | Bahaya |
-|---------|------|--------|
-| **🎯 Sniper Awal** | Wallet yang beli di detik pertama token launch. Biasanya bot insider yang sudah tau duluan. | Tinggi |
-| **👨‍💻 Dev Pegang Banyak** | Developer/pembuat token masih hold persentase besar dari supply. Bisa dump kapan saja (rug pull). | Tinggi |
-| **🕸️ Grup Wallet** | Beberapa wallet yang ternyata didanai dari 1 sumber. Pura-pura beda orang tapi satu komplotan. | Tinggi |
-| **📦 Pembelian Bundel** | Banyak wallet beli dalam 1 transaksi yang sama (khusus Solana). Taktik insider untuk kumpulkan token lewat banyak wallet. | Tinggi |
-| **🐋 Whale Dominan** | Satu wallet pegang lebih dari 10% supply. Kalau jual, harga bisa anjlok drastis. | Sedang |
-| **⚡ Pembeli Awal** | Wallet-wallet pertama yang beli setelah token dibuat. Belum tentu insider, tapi patut diwaspadai. | Sedang |
+| Term | Meaning | Risk |
+|------|---------|------|
+| **Sniper (Early Buy)** | Wallet that bought in the very first block after launch. Likely a bot or insider with advance info. | High |
+| **Dev Large Holding** | Token creator still holds a large % of supply. Rug pull risk. | High |
+| **Wallet Cluster** | Multiple wallets funded by the same source. Coordinated insider activity. | High |
+| **Bundled Buy** | Many wallets bought in a single transaction (Solana). Insider sniping tactic. | High |
+| **Whale Dominance** | One wallet holds >10% of supply. Can crash the price at any time. | Medium |
+| **Early Buyer** | Among the first wallets to buy. Not always malicious, but worth watching. | Medium |
 """)
 
 
-# ━━━━━━━━━━━━━ TAB 3: WALLET CLUSTERS ━━━━━━━━━━━━━
+# ── TAB 3: Wallet Clusters ──
 with tab3:
-    st.subheader("🕸️ Grup Wallet yang Saling Terhubung")
-    st.caption("Wallet-wallet yang didanai dari sumber yang sama = kemungkinan besar 1 orang/kelompok")
+    st.subheader("Wallet Clusters Detected")
+    st.caption("Wallets funded by the same source = likely one person or coordinated group")
 
     if clusters:
         for cl in clusters:
@@ -335,13 +280,13 @@ with tab3:
             size = cl.get("cluster_size", 0)
             total = cl.get("total_bought_usd", 0)
 
-            with st.expander(f"🔴 {chain} — Pendana: {fmt_addr(funder)} — {size} wallet terhubung"):
+            with st.expander(f"🔴 {chain} — Funder: {fmt_addr(funder)} — {size} linked wallets"):
                 st.markdown(f"**Chain:** {chain}")
-                st.markdown(f"**Alamat Pendana (sumber dana):**")
+                st.markdown(f"**Funder Address:**")
                 st.code(funder)
-                st.markdown(f"**Jumlah Wallet Terhubung:** {size}")
-                st.markdown(f"**Total Pembelian:** {fmt_usd(total)}")
-                st.markdown(f"**Terdeteksi:** {cl.get('detected_at', '-')}")
+                st.markdown(f"**Linked Wallets:** {size}")
+                st.markdown(f"**Total Bought:** {fmt_usd(total)}")
+                st.markdown(f"**Detected:** {cl.get('detected_at', '-')}")
 
                 wallets = []
                 try:
@@ -349,43 +294,39 @@ with tab3:
                 except Exception:
                     pass
                 if wallets:
-                    st.markdown("**Daftar Wallet:**")
+                    st.markdown("**Wallet List:**")
                     for i, w in enumerate(wallets, 1):
                         st.code(f"{i}. {w}")
     else:
-        st.info("Belum ada grup wallet terdeteksi. Grup wallet biasanya ditemukan saat menganalisis token dengan on-chain data.")
+        st.info("No wallet clusters detected yet.")
 
 
-# ━━━━━━━━━━━━━ TAB 4: MANUAL SCAN ━━━━━━━━━━━━━
+# ── TAB 4: Manual Scan ──
 with tab4:
-    st.subheader("⚡ Scan & Analisis Manual")
+    st.subheader("Scan & Analyze")
 
     col_l, col_r = st.columns(2)
 
     with col_l:
-        st.markdown("#### 🔎 Cari Meme Coin Baru")
-        st.caption("Cari di Dexscreener berdasarkan kata kunci")
+        st.markdown("#### Search New Meme Coins")
+        st.caption("Search Dexscreener for newly launched tokens")
 
-        keyword = st.text_input(
-            "Kata kunci",
-            placeholder="Contoh: pepe, doge, trump, ai",
-            help="Pisahkan dengan koma kalau lebih dari satu",
-        )
-        min_liq = st.number_input("Min. Likuiditas (USD)", min_value=0, value=500, step=100)
+        kw = st.text_input("Keywords", placeholder="e.g. pepe, doge, trump, ai")
+        ml = st.number_input("Min Liquidity (USD)", min_value=0, value=500, step=100)
 
-        if st.button("🚀 Mulai Scan", use_container_width=True, type="primary"):
-            with st.spinner("Memindai..."):
-                if keyword:
-                    queries = [k.strip() for k in keyword.split(",") if k.strip()]
-                    found = []
+        if st.button("🚀 Start Scan", use_container_width=True, type="primary"):
+            with st.spinner("Scanning Dexscreener..."):
+                if kw:
+                    queries = [k.strip() for k in kw.split(",") if k.strip()]
+                    res = []
                     for q in queries:
-                        found.extend(search_meme_tokens(query=q, min_liquidity=min_liq))
+                        res.extend(search_meme_tokens(query=q, min_liquidity=ml))
                         time.sleep(0.3)
                 else:
-                    found = scan_new_memes()
-                    found = [t for t in found if t.get("liquidity_usd", 0) >= min_liq]
+                    res = scan_new_memes()
+                    res = [t for t in res if t.get("liquidity_usd", 0) >= ml]
 
-                for t in found:
+                for t in res:
                     try:
                         upsert_token(
                             chain=t["chain"], address=t["token_address"],
@@ -400,85 +341,68 @@ with tab4:
                     except Exception:
                         pass
 
-                st.success(f"Ditemukan **{len(found)}** token!")
-                if found:
-                    for t in found[:15]:
-                        st.markdown(
-                            f"**{CHAIN_NAME.get(t['chain'], t['chain'])}** • "
-                            f"**{t.get('symbol', '?')}** ({t.get('name', '')}) • "
-                            f"Liq: {fmt_usd(t.get('liquidity_usd'))} • "
-                            f"MCap: {fmt_usd(t.get('market_cap'))}"
-                        )
+                st.success(f"Found **{len(res)}** tokens!")
+                for t in res[:15]:
+                    ch = CHAIN_NAME.get(t["chain"], t["chain"])
+                    st.markdown(
+                        f"**{ch}** · **{t.get('symbol', '?')}** ({t.get('name', '')}) · "
+                        f"Liq: {fmt_usd(t.get('liquidity_usd'))} · MCap: {fmt_usd(t.get('market_cap'))}"
+                    )
 
     with col_r:
-        st.markdown("#### 🔍 Analisis Token Tertentu")
-        st.caption("Masukkan alamat kontrak token untuk cek insider")
+        st.markdown("#### Analyze Specific Token")
+        st.caption("Enter a contract address to check for insider activity")
 
-        a_chain = st.selectbox("Chain", SUPPORTED_CHAINS, format_func=lambda x: CHAIN_NAME.get(x, x))
-        a_addr = st.text_input("Alamat Token", placeholder="0x... atau alamat Solana")
+        ac = st.selectbox("Chain", SUPPORTED_CHAINS, format_func=lambda x: CHAIN_NAME.get(x, x), key="ac")
+        aa = st.text_input("Token Address", placeholder="0x... or Solana address", key="aa")
 
-        if st.button("🔍 Analisis", use_container_width=True):
-            if not a_addr:
-                st.warning("Masukkan alamat token dulu!")
+        if st.button("🔍 Analyze", use_container_width=True):
+            if not aa:
+                st.warning("Enter a token address first.")
             else:
-                with st.spinner(f"Menganalisis di {CHAIN_NAME.get(a_chain, a_chain)}..."):
-                    results = analyze_token(a_chain, a_addr)
-
+                with st.spinner(f"Analyzing on {CHAIN_NAME.get(ac, ac)}..."):
+                    results = analyze_token(ac, aa)
                 if not results:
-                    st.success("✅ Tidak ada aktivitas mencurigakan!")
+                    st.success("No suspicious activity detected!")
                 else:
                     for r in results:
                         sev = r.get("severity", "low")
                         msg = r.get("msg", str(r))
-                        rtype = r.get("type", "")
-                        if rtype == "error":
-                            st.error(f"❌ {msg}")
+                        rt = r.get("type", "")
+                        if rt == "error":
+                            st.error(f"Error: {msg}")
                         elif sev == "high":
-                            st.error(f"🔴 **BAHAYA** — {msg}")
+                            st.error(f"🔴 **HIGH** — {msg}")
                         elif sev == "medium":
-                            st.warning(f"🟡 **WASPADA** — {msg}")
+                            st.warning(f"🟡 **WARN** — {msg}")
                         else:
                             st.info(f"🟢 {msg}")
-
                         if r.get("wallets"):
-                            with st.expander(f"👁️ Lihat {len(r['wallets'])} wallet"):
+                            with st.expander(f"View {len(r['wallets'])} related wallets"):
                                 for w in r["wallets"]:
                                     st.code(w)
 
 
-# ━━━━━━━━━━━━━━━━━━━ COFFEE / DONATE ━━━━━━━━━━━━━━━━━━━
+# ── Donate (small, bottom) ──
 st.divider()
-st.markdown("""
-<div class="donate-box">
-    <div style="font-size:3rem;">☕</div>
-    <h2>Suka Tool Ini? Traktir Saya Kopi!</h2>
-    <p>
-        Tool ini <b>100% gratis dan open-source</b>. Saya bikin ini supaya komunitas crypto
-        bisa terhindar dari rug pull dan insider scam.<br><br>
-        Kalau kamu merasa terbantu, kirim kopi kecil sebagai apresiasi.
-        Berapapun bikin semangat ngembangin fitur baru! 🙏
-    </p>
-
-    <div class="wallet-box">
-        <div class="label">☀️ SOLANA (SOL, SPL Token)</div>
-        <code>2vMBrEcTd85b1CUwcbU6f3PuKmdUCHkM8kq6mMVp82Ca</code>
-    </div>
-
-    <div class="wallet-box">
-        <div class="label">💎 ETHEREUM / BSC / BASE / ARBITRUM (ETH, USDT, dll)</div>
-        <code>0x2D36d2658B46C509Ecc9BB68D7844bb3ef9D337a</code>
-    </div>
-
-    <p style="color:#64748b;font-size:0.8rem;margin-top:1rem;">
-        Klik alamat untuk copy • Bisa kirim dari chain manapun • Terima kasih, fren! 🤝
-    </p>
-</div>
-""", unsafe_allow_html=True)
+with st.expander("☕ Buy Me a Coffee — Support This Project"):
+    st.markdown(
+        "This tool is **free & open-source**. "
+        "If it helped you dodge a rug pull or spot an insider early, "
+        "consider sending a small tip. Every bit helps keep this project alive!"
+    )
+    col_s, col_e = st.columns(2)
+    with col_s:
+        st.markdown("**Solana (SOL)**")
+        st.code("2vMBrEcTd85b1CUwcbU6f3PuKmdUCHkM8kq6mMVp82Ca")
+    with col_e:
+        st.markdown("**ETH / BSC / Base / Arbitrum**")
+        st.code("0x2D36d2658B46C509Ecc9BB68D7844bb3ef9D337a")
+    st.caption("Click the address to copy · Any amount is appreciated · Thank you, fren! 🤝")
 
 
-# ━━━━━━━━━━━━━━━━━━━ FOOTER ━━━━━━━━━━━━━━━━━━━
-st.divider()
+# ── Footer ──
 f1, f2, f3 = st.columns(3)
-f1.caption(f"Update: {datetime.now().strftime('%d %b %Y, %H:%M')}")
-f2.caption(f"Pantau {len(SUPPORTED_CHAINS)} blockchain")
+f1.caption(f"Updated: {datetime.now().strftime('%d %b %Y, %H:%M')}")
+f2.caption(f"Tracking {len(SUPPORTED_CHAINS)} blockchains")
 f3.caption("[GitHub](https://github.com/reodkt/meme-insider-tracker)")
