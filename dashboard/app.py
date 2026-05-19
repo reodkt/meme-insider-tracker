@@ -99,6 +99,68 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     display: flex; align-items: center; gap: 1rem;
 }
 
+/* Coffee / Donate section */
+.donate-box {
+    background: linear-gradient(135deg, #1a1a2e 0%, #0f172a 50%, #1e1b4b 100%);
+    border: 1px solid #a78bfa44;
+    border-radius: 20px; padding: 2.5rem 2rem; margin: 2rem 0;
+    text-align: center; position: relative; overflow: hidden;
+}
+.donate-box::before {
+    content: ''; position: absolute; top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background: radial-gradient(circle at 30% 50%, #a78bfa11 0%, transparent 50%),
+                radial-gradient(circle at 70% 50%, #667eea11 0%, transparent 50%);
+    animation: pulse-bg 6s ease-in-out infinite;
+}
+@keyframes pulse-bg {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+}
+.donate-box * { position: relative; z-index: 1; }
+.donate-box h2 {
+    font-size: 1.6rem; font-weight: 800;
+    background: linear-gradient(135deg, #a78bfa, #f472b6, #fbbf24);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text; margin: 0 0 0.3rem 0;
+}
+.donate-box .subtitle {
+    color: #9ca3af; font-size: 0.95rem; margin-bottom: 1.5rem;
+    max-width: 520px; margin-left: auto; margin-right: auto;
+}
+.wallet-card {
+    background: #0f0f1f; border: 1px solid #2d2d5c;
+    border-radius: 14px; padding: 1.2rem; margin: 0.8rem auto;
+    max-width: 520px; text-align: left;
+    transition: border-color 0.3s;
+}
+.wallet-card:hover { border-color: #a78bfa; }
+.wallet-card .chain-label {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 0.8rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.5px; margin-bottom: 0.5rem;
+}
+.wallet-card .chain-label.sol { color: #9945ff; }
+.wallet-card .chain-label.eth { color: #627eea; }
+.wallet-card .chain-label .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    display: inline-block;
+}
+.wallet-card .chain-label.sol .dot { background: #9945ff; }
+.wallet-card .chain-label.eth .dot { background: #627eea; }
+.wallet-card .addr {
+    font-family: 'Courier New', monospace;
+    font-size: 0.82rem; color: #e5e7eb;
+    background: #1a1a2e; padding: 8px 12px;
+    border-radius: 8px; word-break: break-all;
+    border: 1px solid #2d2d5c;
+    user-select: all; cursor: pointer;
+}
+.donate-footer {
+    color: #6b7280; font-size: 0.8rem; margin-top: 1.5rem;
+    font-style: italic;
+}
+
 /* Hide streamlit branding */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
@@ -605,6 +667,36 @@ with tab4:
         | **Pembelian Bundel** | Banyak wallet beli dalam 1 transaksi (Solana) — taktik insider |
         | **Whale Dominan** | 1 wallet pegang >10% supply — bisa dump kapan saja |
         """)
+
+
+# ─────────────── COFFEE / DONATE ────────────────
+
+st.markdown("""
+<div class="donate-box">
+    <div style="font-size:2.5rem;margin-bottom:0.5rem;">☕</div>
+    <h2>Traktir Saya Kopi</h2>
+    <p class="subtitle">
+        Tool ini 100% gratis &amp; open-source. Kalau kamu merasa terbantu
+        menghindari rug pull atau menemukan insider lebih awal,
+        beliin saya kopi sebagai apresiasi ya! Setiap donasi bikin saya
+        makin semangat ngembangin fitur baru.
+    </p>
+
+    <div class="wallet-card">
+        <div class="chain-label sol"><span class="dot"></span> Solana (SOL)</div>
+        <div class="addr">2vMBrEcTd85b1CUwcbU6f3PuKmdUCHkM8kq6mMVp82Ca</div>
+    </div>
+
+    <div class="wallet-card">
+        <div class="chain-label eth"><span class="dot"></span> Ethereum / EVM (ETH, BSC, Base, Arbitrum)</div>
+        <div class="addr">0x2D36d2658B46C509Ecc9BB68D7844bb3ef9D337a</div>
+    </div>
+
+    <p class="donate-footer">
+        Klik alamat di atas untuk copy &bull; Berapapun sangat berarti &bull; Terima kasih, fren! 🤝
+    </p>
+</div>
+""", unsafe_allow_html=True)
 
 
 # ─────────────── FOOTER ────────────────
