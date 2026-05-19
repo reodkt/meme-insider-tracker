@@ -176,7 +176,7 @@ with st.sidebar:
 
     st.divider()
 
-    if st.button("🔄 Rescan Now", use_container_width=True, type="primary"):
+    if st.button("🔄 Rescan Now", width="stretch", type="primary"):
         st.session_state.loaded = False
         st.rerun()
 
@@ -315,10 +315,10 @@ with tab1:
                         st.markdown(f"- {line}")
                     st.caption(f"Detected: {when}")
                 with col_links:
-                    st.link_button("📈 Chart", dex_link(raw_chain, token_addr), use_container_width=True)
-                    st.link_button("🔗 Explorer", exp_link(raw_chain, token_addr), use_container_width=True)
+                    st.link_button("📈 Chart", dex_link(raw_chain, token_addr), width="stretch")
+                    st.link_button("🔗 Explorer", exp_link(raw_chain, token_addr), width="stretch")
                     if ev.get("wallet_address") and ev["wallet_address"] != ev.get("event_type"):
-                        st.link_button("👛 Wallet", wallet_exp_link(raw_chain, ev["wallet_address"]), use_container_width=True)
+                        st.link_button("👛 Wallet", wallet_exp_link(raw_chain, ev["wallet_address"]), width="stretch")
 
         # Summary charts
         st.divider()
@@ -402,7 +402,7 @@ with tab2:
                 "Explorer": exp_link(chain, addr),
             })
         st.dataframe(
-            pd.DataFrame(rows), use_container_width=True, height=480, hide_index=True,
+            pd.DataFrame(rows), width="stretch", height=480, hide_index=True,
             column_config={
                 "Chart": st.column_config.LinkColumn("Chart", display_text="📈 View"),
                 "Explorer": st.column_config.LinkColumn("Explorer", display_text="🔗 View"),
@@ -436,7 +436,7 @@ with tab3:
                 st.markdown(f"**Total Bought:** {fmt_usd(total)}")
                 st.markdown(f"**Detected:** {cl.get('detected_at', '-')}")
 
-                st.link_button("👛 Funder on Explorer", wallet_exp_link(raw_chain, funder), use_container_width=True)
+                st.link_button("👛 Funder on Explorer", wallet_exp_link(raw_chain, funder), width="stretch")
 
                 wallets = []
                 try:
@@ -466,7 +466,7 @@ with tab4:
         kw = st.text_input("Keywords", placeholder="e.g. pepe, doge, trump, ai")
         ml = st.number_input("Min Liquidity (USD)", min_value=0, value=500, step=100)
 
-        if st.button("🚀 Scan + Analyze", use_container_width=True, type="primary"):
+        if st.button("🚀 Scan + Analyze", width="stretch", type="primary"):
             with st.spinner("Scanning & analyzing all chains..."):
                 if kw:
                     queries = [k.strip() for k in kw.split(",") if k.strip()]
@@ -519,7 +519,7 @@ with tab4:
         ac = st.selectbox("Chain", SUPPORTED_CHAINS, format_func=lambda x: CHAIN_NAME.get(x, x), key="ac")
         aa = st.text_input("Token Address", placeholder="0x... or Solana address", key="aa")
 
-        if st.button("🔍 Deep Analyze", use_container_width=True):
+        if st.button("🔍 Deep Analyze", width="stretch"):
             if not aa:
                 st.warning("Enter a token address first.")
             else:
@@ -541,8 +541,8 @@ with tab4:
                         else:
                             st.info(f"🟢 {msg}")
 
-                    st.link_button("📈 View on Dexscreener", dex_link(ac, aa), use_container_width=True)
-                    st.link_button("🔗 View on Explorer", exp_link(ac, aa), use_container_width=True)
+                    st.link_button("📈 View on Dexscreener", dex_link(ac, aa), width="stretch")
+                    st.link_button("🔗 View on Explorer", exp_link(ac, aa), width="stretch")
 
 
 # ══════════════════════════════════════════════════════
