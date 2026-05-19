@@ -37,7 +37,7 @@ INSIDER_CONFIG = {
     "dev_sell_alert_pct": 10,        # alert if dev sells >X% of supply
     "sniper_max_block_delay": 2,     # bought within N blocks = sniper
     "min_liquidity_usd": 1_000,      # skip dust pairs
-    "max_token_age_hours": 72,       # only track tokens < N hours old
+    "max_token_age_hours": 6,        # only track tokens < 6 hours old
 }
 
 # --- Database ---

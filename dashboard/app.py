@@ -11,7 +11,7 @@ from datetime import datetime
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-from core.database import init_db, get_recent_events, get_tracked_tokens, get_clusters, upsert_token
+from core.database import init_db, get_recent_events, get_tracked_tokens, get_clusters, upsert_token, purge_old_data
 from core.config import SUPPORTED_CHAINS
 from chains.dexscreener import scan_new_memes, search_meme_tokens
 from analyzers.smart_analyzer import batch_analyze, analyze_token_full
@@ -118,6 +118,9 @@ if "loaded" not in st.session_state:
 
 if not st.session_state.loaded:
     with st.spinner("🔍 Scanning all chains for meme coins & analyzing insider patterns..."):
+        # Purge stale data (>6h) before every scan
+        purge_old_data(max_age_hours=6)
+
         try:
             found = scan_new_memes(queries=[
                 "meme", "pepe", "doge", "bonk", "moon",

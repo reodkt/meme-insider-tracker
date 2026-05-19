@@ -141,10 +141,21 @@ def add_wallet_cluster(chain, funder_address, wallet_addresses,
     conn.close()
 
 
-def get_recent_events(limit=100, chain=None, severity=None):
+def purge_old_data(max_age_hours=6):
+    """Remove events, tokens, and clusters older than max_age_hours."""
     conn = get_db()
-    query = "SELECT * FROM insider_events WHERE 1=1"
-    params = []
+    cutoff = f"-{max_age_hours} hours"
+    conn.execute("DELETE FROM insider_events WHERE detected_at < datetime('now', ?)", (cutoff,))
+    conn.execute("DELETE FROM tokens WHERE last_updated < datetime('now', ?)", (cutoff,))
+    conn.execute("DELETE FROM wallet_clusters WHERE detected_at < datetime('now', ?)", (cutoff,))
+    conn.commit()
+    conn.close()
+
+
+def get_recent_events(limit=100, chain=None, severity=None, max_age_hours=6):
+    conn = get_db()
+    query = "SELECT * FROM insider_events WHERE detected_at >= datetime('now', ?)"
+    params = [f"-{max_age_hours} hours"]
     if chain:
         query += " AND chain=?"
         params.append(chain)
@@ -158,10 +169,10 @@ def get_recent_events(limit=100, chain=None, severity=None):
     return [dict(r) for r in rows]
 
 
-def get_tracked_tokens(limit=200, chain=None):
+def get_tracked_tokens(limit=200, chain=None, max_age_hours=6):
     conn = get_db()
-    query = "SELECT * FROM tokens WHERE 1=1"
-    params = []
+    query = "SELECT * FROM tokens WHERE last_updated >= datetime('now', ?)"
+    params = [f"-{max_age_hours} hours"]
     if chain:
         query += " AND chain=?"
         params.append(chain)
@@ -172,10 +183,10 @@ def get_tracked_tokens(limit=200, chain=None):
     return [dict(r) for r in rows]
 
 
-def get_clusters(limit=50, chain=None):
+def get_clusters(limit=50, chain=None, max_age_hours=6):
     conn = get_db()
-    query = "SELECT * FROM wallet_clusters WHERE 1=1"
-    params = []
+    query = "SELECT * FROM wallet_clusters WHERE detected_at >= datetime('now', ?)"
+    params = [f"-{max_age_hours} hours"]
     if chain:
         query += " AND chain=?"
         params.append(chain)
