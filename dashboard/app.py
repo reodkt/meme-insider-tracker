@@ -231,17 +231,6 @@ with tab1:
     )
 
     if events:
-        # Group by severity
-        high_events = [e for e in events if e.get("severity") == "high"]
-        med_events = [e for e in events if e.get("severity") == "medium"]
-        low_events = [e for e in events if e.get("severity") == "low"]
-
-        if high_events:
-            st.markdown("### 🔴 High Risk")
-        for ev in high_events:
-            _render_event(ev) if False else None  # placeholder, rendered below
-
-        # Render all events
         for ev in events:
             sev = ev.get("severity", "low")
             icon = SEV_ICON.get(sev, "")
