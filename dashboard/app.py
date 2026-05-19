@@ -51,6 +51,27 @@ EVENT_NAME = {
 SEV_LABEL = {"high": "HIGH", "medium": "WARN", "low": "INFO"}
 SEV_ICON = {"high": "🔴", "medium": "🟡", "low": "🟢"}
 
+# Explorer / chart URLs
+DEX_URL = "https://dexscreener.com"
+EXPLORER_URL = {
+    "ethereum": "https://etherscan.io/token/",
+    "bsc": "https://bscscan.com/token/",
+    "base": "https://basescan.org/token/",
+    "arbitrum": "https://arbiscan.io/token/",
+    "polygon": "https://polygonscan.com/token/",
+    "avalanche": "https://snowscan.xyz/token/",
+    "solana": "https://solscan.io/token/",
+}
+
+
+def dexscreener_link(chain, address):
+    return f"{DEX_URL}/{chain}/{address}"
+
+
+def explorer_link(chain, address):
+    base = EXPLORER_URL.get(chain, "")
+    return f"{base}{address}" if base else ""
+
 
 def fmt_usd(val):
     if not val:
@@ -184,8 +205,12 @@ with tab1:
         rows = []
         for t in tokens:
             price = t.get("price_usd", 0)
+            chain = t.get("chain", "")
+            addr = t.get("address", "")
+            pair = t.get("pair_address", "")
+            chart_target = pair if pair else addr
             rows.append({
-                "Chain": CHAIN_NAME.get(t.get("chain", ""), t.get("chain", "")),
+                "Chain": CHAIN_NAME.get(chain, chain),
                 "Symbol": t.get("symbol", "-"),
                 "Name": t.get("name", "-"),
                 "Price": f"${price:,.8f}" if price and price < 0.01
@@ -195,8 +220,21 @@ with tab1:
                 "Liquidity": fmt_usd(t.get("liquidity_usd")),
                 "Vol 24h": fmt_usd(t.get("volume_24h")),
                 "DEX": t.get("dex", "-"),
+                "Chart": dexscreener_link(chain, chart_target),
+                "Explorer": explorer_link(chain, addr),
             })
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, height=480, hide_index=True)
+
+        df = pd.DataFrame(rows)
+        st.dataframe(
+            df,
+            use_container_width=True,
+            height=480,
+            hide_index=True,
+            column_config={
+                "Chart": st.column_config.LinkColumn("Chart", display_text="📈 View"),
+                "Explorer": st.column_config.LinkColumn("Explorer", display_text="🔗 View"),
+            },
+        )
         st.caption(f"Showing {len(tokens)} tokens across {len(set(t.get('chain','') for t in tokens))} chains")
     else:
         st.info("No tokens found yet. Click **Rescan Now** in the sidebar.")
@@ -238,6 +276,20 @@ with tab2:
                 if desc:
                     st.markdown(f"**Details:** {' · '.join(desc)}")
                 st.markdown(f"**Detected:** {when}")
+
+                # Quick links
+                raw_chain = ev.get("chain", "")
+                token_addr = ev.get("token_address", "")
+                wallet_addr = ev.get("wallet_address", "")
+                lk1, lk2, lk3 = st.columns(3)
+                with lk1:
+                    st.link_button("📈 Dexscreener Chart", dexscreener_link(raw_chain, token_addr), use_container_width=True)
+                with lk2:
+                    st.link_button("🔗 Token Explorer", explorer_link(raw_chain, token_addr), use_container_width=True)
+                with lk3:
+                    exp_base = EXPLORER_URL.get(raw_chain, "")
+                    wallet_url = f"{exp_base.replace('/token/', '/address/')}{wallet_addr}" if exp_base else ""
+                    st.link_button("👛 Wallet Explorer", wallet_url, use_container_width=True)
 
         st.divider()
         st.subheader("Summary")
@@ -344,9 +396,12 @@ with tab4:
                 st.success(f"Found **{len(res)}** tokens!")
                 for t in res[:15]:
                     ch = CHAIN_NAME.get(t["chain"], t["chain"])
+                    pair = t.get("pair_address", "") or t.get("token_address", "")
+                    dex_link = dexscreener_link(t["chain"], pair)
                     st.markdown(
                         f"**{ch}** · **{t.get('symbol', '?')}** ({t.get('name', '')}) · "
-                        f"Liq: {fmt_usd(t.get('liquidity_usd'))} · MCap: {fmt_usd(t.get('market_cap'))}"
+                        f"Liq: {fmt_usd(t.get('liquidity_usd'))} · MCap: {fmt_usd(t.get('market_cap'))} · "
+                        f"[📈 Chart]({dex_link})"
                     )
 
     with col_r:
