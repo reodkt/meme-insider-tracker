@@ -37,11 +37,7 @@ st.markdown("""<style>
 </style>""", unsafe_allow_html=True)
 
 # ── Constants ──
-CHAIN_NAME = {
-    "ethereum": "Ethereum", "bsc": "BSC", "base": "Base",
-    "arbitrum": "Arbitrum", "polygon": "Polygon",
-    "avalanche": "Avalanche", "solana": "Solana",
-}
+CHAIN_NAME = {"solana": "Solana"}
 EVENT_NAME = {
     "honeypot_signal": "🍯 Honeypot",
     "liquidity_trap": "🪤 Liquidity Trap",
@@ -70,15 +66,7 @@ SCAM_TYPES = {
 }
 
 DEX_URL = "https://dexscreener.com"
-EXPLORER_URL = {
-    "ethereum": "https://etherscan.io/token/",
-    "bsc": "https://bscscan.com/token/",
-    "base": "https://basescan.org/token/",
-    "arbitrum": "https://arbiscan.io/token/",
-    "polygon": "https://polygonscan.com/token/",
-    "avalanche": "https://snowscan.xyz/token/",
-    "solana": "https://solscan.io/token/",
-}
+EXPLORER_URL = {"solana": "https://solscan.io/token/"}
 
 
 def dex_link(chain, addr):
@@ -118,7 +106,7 @@ if "loaded" not in st.session_state:
     st.session_state.loaded = False
 
 if not st.session_state.loaded:
-    with st.spinner("🔍 Scanning all chains for meme coins & analyzing insider patterns..."):
+    with st.spinner("🔍 Scanning Solana for meme coins & analyzing insider patterns..."):
         # Purge stale data (>6h) before every scan
         purge_old_data(max_age_hours=6)
 
@@ -126,6 +114,8 @@ if not st.session_state.loaded:
             found = scan_new_memes(queries=[
                 "meme", "pepe", "doge", "bonk", "moon",
                 "shib", "floki", "trump", "ai", "cat",
+                "pump", "sol", "solana", "degen", "frog",
+                "dog", "ape", "based", "jup", "wen",
             ])
             for t in found:
                 try:
@@ -154,17 +144,13 @@ if not st.session_state.loaded:
 
 
 # ── Sidebar ──
+sel_chain = "solana"  # Solana only
 with st.sidebar:
     st.title("🔍 Meme Insider Tracker")
-    st.caption("Real-time insider detection · All chains")
+    st.caption("Real-time insider detection · Solana")
     st.divider()
 
     st.subheader("Filters")
-    sel_chain = st.selectbox(
-        "Chain",
-        ["All"] + SUPPORTED_CHAINS,
-        format_func=lambda x: "All Chains" if x == "All" else CHAIN_NAME.get(x, x),
-    )
     sel_sev = st.selectbox(
         "Severity",
         ["All", "high", "medium", "low"],
@@ -188,7 +174,7 @@ with st.sidebar:
     show_scam = st.toggle("Show scam/honeypot tokens", value=False,
                           help="Show tokens flagged as honeypot, rug pull, pump & dump, etc.")
     st.divider()
-    st.caption("v2.0 · Free · No API Key · All Chains")
+    st.caption("v2.0 · Solana · Free · No API Key")
 
 if auto:
     time.sleep(30)
@@ -197,10 +183,10 @@ if auto:
 
 
 # ── Load Data ──
-cf = sel_chain if sel_chain != "All" else None
+cf = "solana"
 sf = sel_sev if sel_sev != "All" else None
 events_raw = get_recent_events(limit=500, chain=cf, severity=sf)
-all_events_raw = get_recent_events(limit=2000, chain=None, severity=None)
+all_events_raw = get_recent_events(limit=2000, chain=cf, severity=None)
 tokens_raw = get_tracked_tokens(limit=300, chain=cf)
 clusters = get_clusters(limit=50, chain=cf)
 
@@ -229,19 +215,17 @@ else:
 
 # ── Header ──
 st.title("🔍 Meme Insider Tracker")
-st.markdown("Automatic insider & whale detection for meme coins — **7 chains, real-time, 100% free.**")
+st.markdown("Automatic insider & whale detection for **Solana meme coins** — real-time, 100% free.")
 
 # ── Metrics ──
 high_ct = len([e for e in events if e.get("severity") == "high"])
 warn_ct = len([e for e in events if e.get("severity") == "medium"])
-chains_active = len(set(e.get("chain", "") for e in events if e.get("chain")))
-c1, c2, c3, c4, c5, c6 = st.columns(6)
+c1, c2, c3, c4, c5 = st.columns(5)
 c1.metric("Tokens", len(tokens))
 c2.metric("🛡️ Filtered", len(_flagged_tokens))
 c3.metric("Alerts", len(events))
 c4.metric("🔴 High", high_ct)
 c5.metric("🟡 Warn", warn_ct)
-c6.metric("Chains", chains_active)
 
 
 # ── Tabs ──
@@ -576,7 +560,7 @@ with tab4:
         ml = st.number_input("Min Liquidity (USD)", min_value=0, value=500, step=100)
 
         if st.button("🚀 Scan + Analyze", width="stretch", type="primary"):
-            with st.spinner("Scanning & analyzing all chains..."):
+            with st.spinner("Scanning & analyzing Solana meme coins..."):
                 if kw:
                     queries = [k.strip() for k in kw.split(",") if k.strip()]
                     res = []
@@ -623,10 +607,10 @@ with tab4:
 
     with col_r:
         st.markdown("#### Analyze Specific Token")
-        st.caption("Enter a contract address to check for insider activity on any chain")
+        st.caption("Enter a Solana token address to check for insider activity")
 
-        ac = st.selectbox("Chain", SUPPORTED_CHAINS, format_func=lambda x: CHAIN_NAME.get(x, x), key="ac")
-        aa = st.text_input("Token Address", placeholder="0x... or Solana address", key="aa")
+        ac = "solana"
+        aa = st.text_input("Token Address", placeholder="Solana token address...", key="aa")
 
         if st.button("🔍 Deep Analyze", width="stretch"):
             if not aa:
@@ -664,17 +648,11 @@ with st.expander("☕ Buy Me a Coffee — Support This Project"):
         "If it helped you dodge a rug pull or spot an insider early, "
         "consider sending a small tip to keep this project alive!"
     )
-    cs, ce = st.columns(2)
-    with cs:
-        st.markdown("**Solana (SOL)**")
-        st.code("2vMBrEcTd85b1CUwcbU6f3PuKmdUCHkM8kq6mMVp82Ca")
-    with ce:
-        st.markdown("**ETH / BSC / Base / Arb**")
-        st.code("0x2D36d2658B46C509Ecc9BB68D7844bb3ef9D337a")
+    st.markdown("**Solana (SOL)**")
+    st.code("2vMBrEcTd85b1CUwcbU6f3PuKmdUCHkM8kq6mMVp82Ca")
     st.caption("Click address to copy · Any amount appreciated · Thanks fren! 🤝")
 
 # ── Footer ──
-f1, f2, f3 = st.columns(3)
-f1.caption(f"Updated: {datetime.now().strftime('%d %b %Y, %H:%M')}")
-f2.caption(f"Tracking {len(SUPPORTED_CHAINS)} chains")
-f3.caption("[GitHub](https://github.com/reodkt/meme-insider-tracker)")
+f1, f2 = st.columns(2)
+f1.caption(f"Updated: {datetime.now().strftime('%d %b %Y, %H:%M')} · Solana only")
+f2.caption("[GitHub](https://github.com/reodkt/meme-insider-tracker)")

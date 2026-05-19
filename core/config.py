@@ -26,10 +26,7 @@ CHAIN_RPCS = {
 SOLANA_RPC = "https://api.mainnet-beta.solana.com"
 
 # --- Chain IDs for Dexscreener ---
-SUPPORTED_CHAINS = [
-    "ethereum", "bsc", "base", "arbitrum",
-    "polygon", "avalanche", "solana",
-]
+SUPPORTED_CHAINS = ["solana"]
 
 # --- Insider detection thresholds ---
 INSIDER_CONFIG = {
