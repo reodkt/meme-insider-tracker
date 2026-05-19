@@ -62,6 +62,12 @@ EVENT_NAME = {
 SEV_LABEL = {"high": "HIGH", "medium": "WARN", "low": "INFO"}
 SEV_ICON = {"high": "🔴", "medium": "🟡", "low": "🟢"}
 
+# Token types considered scam/dangerous — filtered out from Tokens tab by default
+SCAM_TYPES = {
+    "honeypot_signal", "rug_pull_risk", "liquidity_trap",
+    "pump_and_dump", "wash_trading", "mass_dumping", "crash_alert",
+}
+
 DEX_URL = "https://dexscreener.com"
 EXPLORER_URL = {
     "ethereum": "https://etherscan.io/token/",
@@ -175,6 +181,8 @@ with st.sidebar:
         st.rerun()
 
     auto = st.toggle("Auto-refresh (30s)")
+    show_scam = st.toggle("Show scam/honeypot tokens", value=False,
+                          help="Show tokens flagged as honeypot, rug pull, pump & dump, etc.")
     st.divider()
     st.caption("v2.0 · Free · No API Key · All Chains")
 
@@ -188,7 +196,8 @@ if auto:
 cf = sel_chain if sel_chain != "All" else None
 sf = sel_sev if sel_sev != "All" else None
 events_raw = get_recent_events(limit=500, chain=cf, severity=sf)
-tokens = get_tracked_tokens(limit=300, chain=cf)
+all_events_raw = get_recent_events(limit=2000, chain=None, severity=None)
+tokens_raw = get_tracked_tokens(limit=300, chain=cf)
 clusters = get_clusters(limit=50, chain=cf)
 
 # Filter events by type if selected
@@ -196,6 +205,22 @@ if sel_type:
     events = [e for e in events_raw if e.get("event_type") in sel_type]
 else:
     events = events_raw
+
+# Build set of flagged (scam) token keys: "chain:address"
+_flagged_tokens = set()
+for ev in all_events_raw:
+    if ev.get("event_type") in SCAM_TYPES and ev.get("severity") == "high":
+        key = f"{ev.get('chain','')}:{ev.get('token_address','').lower()}"
+        _flagged_tokens.add(key)
+
+# Filter tokens: exclude scam tokens unless toggle is on
+if show_scam:
+    tokens = tokens_raw
+else:
+    tokens = [
+        t for t in tokens_raw
+        if f"{t.get('chain','')}:{t.get('address','').lower()}" not in _flagged_tokens
+    ]
 
 
 # ── Header ──
@@ -206,12 +231,13 @@ st.markdown("Automatic insider & whale detection for meme coins — **7 chains, 
 high_ct = len([e for e in events if e.get("severity") == "high"])
 warn_ct = len([e for e in events if e.get("severity") == "medium"])
 chains_active = len(set(e.get("chain", "") for e in events if e.get("chain")))
-c1, c2, c3, c4, c5 = st.columns(5)
+c1, c2, c3, c4, c5, c6 = st.columns(6)
 c1.metric("Tokens", len(tokens))
-c2.metric("Alerts", len(events))
-c3.metric("🔴 High", high_ct)
-c4.metric("🟡 Warn", warn_ct)
-c5.metric("Chains", chains_active)
+c2.metric("🛡️ Filtered", len(_flagged_tokens))
+c3.metric("Alerts", len(events))
+c4.metric("🔴 High", high_ct)
+c5.metric("🟡 Warn", warn_ct)
+c6.metric("Chains", chains_active)
 
 
 # ── Tabs ──
@@ -346,6 +372,10 @@ with tab2:
     st.subheader("📊 Tracked Meme Coins")
     st.caption("Live data from Dexscreener — click Chart to view price history")
 
+    filtered_ct = len(tokens_raw) - len(tokens)
+    if filtered_ct > 0:
+        st.info(f"🛡️ **{filtered_ct}** scam/honeypot tokens hidden. Enable *\"Show scam/honeypot tokens\"* in sidebar to see them.")
+
     if tokens:
         rows = []
         for t in tokens:
@@ -354,7 +384,10 @@ with tab2:
             addr = t.get("address", "")
             pair = t.get("pair_address", "")
             target = pair if pair else addr
+            tk = f"{chain}:{addr.lower()}"
+            is_flagged = tk in _flagged_tokens
             rows.append({
+                "Status": "🚫 SCAM" if is_flagged else "✅ OK",
                 "Chain": CHAIN_NAME.get(chain, chain),
                 "Symbol": t.get("symbol", "-"),
                 "Name": t.get("name", "-"),
