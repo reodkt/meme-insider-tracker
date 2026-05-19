@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from core.config import (
     DEXSCREENER_NEW_PAIRS, DEXSCREENER_SEARCH,
     DEXSCREENER_TOKENS, DEXSCREENER_PAIRS,
+    DEXSCREENER_BOOSTS_LATEST, DEXSCREENER_BOOSTS_TOP,
     SUPPORTED_CHAINS, INSIDER_CONFIG
 )
 
@@ -114,25 +115,96 @@ def get_pair_info(chain, pair_address):
     return data["pairs"][0] if data["pairs"] else None
 
 
+def fetch_boosted_tokens():
+    """Fetch recently boosted tokens from Dexscreener (CT attention indicator)."""
+    results = []
+    for url in [DEXSCREENER_BOOSTS_LATEST, DEXSCREENER_BOOSTS_TOP]:
+        data = _get(url)
+        if not data:
+            continue
+        items = data if isinstance(data, list) else data.get("tokens", data.get("pairs", []))
+        for item in items:
+            chain = item.get("chainId", "").lower()
+            if chain not in SUPPORTED_CHAINS:
+                continue
+            addr = item.get("tokenAddress", "")
+            if not addr:
+                continue
+            results.append({
+                "chain": chain,
+                "token_address": addr,
+                "symbol": item.get("symbol", item.get("description", "")[:10]),
+                "name": item.get("description", item.get("name", "")),
+                "boosted": True,
+            })
+        time.sleep(0.3)
+    return results
+
+
+def fetch_boosted_with_pairs():
+    """Fetch boosted tokens then enrich with pair data."""
+    boosted = fetch_boosted_tokens()
+    enriched = []
+    for b in boosted[:30]:  # limit to avoid rate limits
+        pairs = get_token_pairs(b["chain"], b["token_address"])
+        if pairs:
+            pair = pairs[0]
+            base = pair.get("baseToken", {})
+            enriched.append({
+                "chain": b["chain"],
+                "token_address": base.get("address", b["token_address"]),
+                "symbol": base.get("symbol", b.get("symbol", "")),
+                "name": base.get("name", b.get("name", "")),
+                "pair_address": pair.get("pairAddress", ""),
+                "dex": pair.get("dexId", ""),
+                "liquidity_usd": pair.get("liquidity", {}).get("usd", 0) or 0,
+                "market_cap": pair.get("marketCap", 0) or 0,
+                "price_usd": float(pair.get("priceUsd", 0) or 0),
+                "volume_24h": pair.get("volume", {}).get("h24", 0) or 0,
+                "created_at": pair.get("pairCreatedAt"),
+                "price_change_5m": pair.get("priceChange", {}).get("m5", 0),
+                "price_change_1h": pair.get("priceChange", {}).get("h1", 0),
+                "price_change_24h": pair.get("priceChange", {}).get("h24", 0),
+                "txns_buys_24h": pair.get("txns", {}).get("h24", {}).get("buys", 0),
+                "txns_sells_24h": pair.get("txns", {}).get("h24", {}).get("sells", 0),
+                "boosted": True,
+            })
+        time.sleep(0.3)
+    return enriched
+
+
 def scan_new_memes(queries=None):
     """
     Main scanning function — searches multiple meme-related queries
-    to find new launches across all chains.
+    + boosted/trending tokens across all chains.
     """
     if queries is None:
         queries = [
             "meme", "pepe", "doge", "shib", "inu", "moon",
             "baby", "elon", "trump", "cat", "wojak", "chad",
-            "bonk", "floki", "ai", "grok",
+            "bonk", "floki", "ai", "grok", "sol", "eth",
+            "pump", "based", "degen", "ape", "frog", "dog",
         ]
 
     all_tokens = {}
+
+    # 1) Search-based scanning
     for q in queries:
         results = search_meme_tokens(query=q)
         for token in results:
             key = f"{token['chain']}:{token['token_address'].lower()}"
             if key not in all_tokens:
                 all_tokens[key] = token
-        time.sleep(0.3)  # rate limit
+        time.sleep(0.3)
+
+    # 2) Boosted/trending tokens (CT attention)
+    try:
+        boosted = fetch_boosted_with_pairs()
+        for token in boosted:
+            key = f"{token['chain']}:{token['token_address'].lower()}"
+            if key not in all_tokens:
+                all_tokens[key] = token
+    except Exception:
+        pass
 
     return list(all_tokens.values())

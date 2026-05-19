@@ -9,6 +9,8 @@ DEXSCREENER_NEW_PAIRS = f"{DEXSCREENER_BASE}/token-profiles/latest/v1"
 DEXSCREENER_SEARCH = f"{DEXSCREENER_BASE}/latest/dex/search"
 DEXSCREENER_PAIRS = f"{DEXSCREENER_BASE}/latest/dex/pairs"
 DEXSCREENER_TOKENS = f"{DEXSCREENER_BASE}/latest/dex/tokens"
+DEXSCREENER_BOOSTS_LATEST = f"{DEXSCREENER_BASE}/token-boosts/latest/v1"
+DEXSCREENER_BOOSTS_TOP = f"{DEXSCREENER_BASE}/token-boosts/top/v1"
 
 # --- Chain RPCs (free public endpoints) ---
 CHAIN_RPCS = {
@@ -37,7 +39,7 @@ INSIDER_CONFIG = {
     "dev_sell_alert_pct": 10,        # alert if dev sells >X% of supply
     "sniper_max_block_delay": 2,     # bought within N blocks = sniper
     "min_liquidity_usd": 1_000,      # skip dust pairs
-    "max_token_age_hours": 6,        # only track tokens < 6 hours old
+    "max_token_age_hours": 24,       # fetch tokens up to 24 hours old
 }
 
 # --- Database ---

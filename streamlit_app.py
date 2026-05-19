@@ -15,6 +15,7 @@ from core.database import init_db, get_recent_events, get_tracked_tokens, get_cl
 from core.config import SUPPORTED_CHAINS
 from chains.dexscreener import scan_new_memes, search_meme_tokens
 from analyzers.smart_analyzer import batch_analyze, analyze_token_full
+from feeds.ct_feed import get_ct_feed
 
 # ── Page Config ──
 st.set_page_config(page_title="Meme Insider Tracker", page_icon="🔍", layout="wide")
@@ -244,8 +245,8 @@ c6.metric("Chains", chains_active)
 
 
 # ── Tabs ──
-tab1, tab2, tab3, tab4 = st.tabs([
-    "🚨 Insider Alerts", "📊 Tokens", "🕸️ Wallet Clusters", "⚡ Scan & Analyze",
+tab1, tab2, tab5, tab3, tab4 = st.tabs([
+    "🚨 Insider Alerts", "📊 Tokens", "📱 CT Live", "🕸️ Wallet Clusters", "⚡ Scan & Analyze",
 ])
 
 
@@ -372,16 +373,31 @@ with tab1:
 # TAB 2: TOKEN LIST
 # ══════════════════════════════════════════════════════
 with tab2:
-    st.subheader("📊 Tracked Meme Coins")
-    st.caption("Live data from Dexscreener — click Chart to view price history")
+    st.subheader("📊 Tracked Meme Coins — Sorted by Insider Activity")
+    st.caption("Tokens with the most insider alerts shown first. Live data from Dexscreener.")
 
     filtered_ct = len(tokens_raw) - len(tokens)
     if filtered_ct > 0:
         st.info(f"🛡️ **{filtered_ct}** scam/honeypot tokens hidden. Enable *\"Show scam/honeypot tokens\"* in sidebar to see them.")
 
     if tokens:
+        # Count alerts per token from events
+        _token_alert_count = {}
+        for ev in all_events_raw:
+            tk = f"{ev.get('chain','')}:{ev.get('token_address','').lower()}"
+            _token_alert_count[tk] = _token_alert_count.get(tk, 0) + 1
+
+        # Sort tokens by alert count (most active first)
+        tokens_sorted = sorted(
+            tokens,
+            key=lambda t: _token_alert_count.get(
+                f"{t.get('chain','')}:{t.get('address','').lower()}", 0
+            ),
+            reverse=True,
+        )
+
         rows = []
-        for t in tokens:
+        for t in tokens_sorted:
             price = t.get("price_usd", 0)
             chain = t.get("chain", "")
             addr = t.get("address", "")
@@ -389,7 +405,9 @@ with tab2:
             target = pair if pair else addr
             tk = f"{chain}:{addr.lower()}"
             is_flagged = tk in _flagged_tokens
+            alert_ct = _token_alert_count.get(tk, 0)
             rows.append({
+                "Alerts": f"🔴 {alert_ct}" if alert_ct > 0 else "-",
                 "Status": "🚫 SCAM" if is_flagged else "✅ OK",
                 "Chain": CHAIN_NAME.get(chain, chain),
                 "Symbol": t.get("symbol", "-"),
@@ -414,6 +432,94 @@ with tab2:
         st.caption(f"{len(tokens)} tokens across {len(set(t.get('chain','') for t in tokens))} chains")
     else:
         st.info("No tokens found yet. Click **Rescan Now**.")
+
+
+# ══════════════════════════════════════════════════════
+# TAB 5: CT LIVE FEED
+# ══════════════════════════════════════════════════════
+with tab5:
+    st.subheader("📱 CT & Crypto Live Feed")
+    st.caption("Real-time crypto news, trending coins, Reddit discussions, and boosted tokens. Auto-refreshes with rescan.")
+
+    # Source filter
+    src_filter = st.multiselect(
+        "Filter Sources",
+        ["Reddit", "CoinGecko Trending", "Crypto News", "Dexscreener Boosted"],
+        default=[],
+        help="Leave empty to show all sources",
+        key="ct_src_filter",
+    )
+
+    SRC_MAP = {
+        "Reddit": "reddit",
+        "CoinGecko Trending": "trending",
+        "Crypto News": "news",
+        "Dexscreener Boosted": "boosted",
+    }
+
+    with st.spinner("Loading CT feed..."):
+        ct_feed = get_ct_feed(limit=60)
+
+    if src_filter:
+        allowed = {SRC_MAP[s] for s in src_filter}
+        ct_feed = [f for f in ct_feed if f.get("type") in allowed or f.get("type", "").startswith(tuple(allowed))]
+
+    if ct_feed:
+        # Summary metrics
+        fc1, fc2, fc3, fc4 = st.columns(4)
+        fc1.metric("Total Items", len(ct_feed))
+        fc2.metric("🟠 Reddit", len([f for f in ct_feed if f["type"] == "reddit"]))
+        fc3.metric("📰 News", len([f for f in ct_feed if f["type"] == "news"]))
+        fc4.metric("🦎 Trending", len([f for f in ct_feed if f["type"].startswith("trending")]))
+
+        st.divider()
+
+        for item in ct_feed:
+            src_icon = item.get("source_icon", "")
+            source = item.get("source", "")
+            title = item.get("title", "")
+            url = item.get("url", "")
+            time_str = item.get("time_str", "")
+            item_type = item.get("type", "")
+
+            # Color by type
+            if item_type == "reddit":
+                score = item.get("score", 0)
+                comments = item.get("comments", 0)
+                with st.container():
+                    st.markdown(
+                        f"{src_icon} **{source}** · {time_str} · "
+                        f"⬆️ {score} · 💬 {comments}"
+                    )
+                    st.markdown(f"[{title}]({url})")
+                    st.divider()
+
+            elif item_type.startswith("trending"):
+                with st.container():
+                    st.markdown(f"{src_icon} **{source}**")
+                    st.markdown(f"[{title}]({url})")
+                    st.divider()
+
+            elif item_type == "news":
+                desc = item.get("description", "")
+                with st.container():
+                    st.markdown(f"{src_icon} **{source}** · {time_str}")
+                    st.markdown(f"**[{title}]({url})**")
+                    if desc:
+                        st.caption(desc[:150])
+                    st.divider()
+
+            elif item_type == "boosted":
+                chain = item.get("chain", "")
+                with st.container():
+                    st.markdown(
+                        f"{src_icon} **{source}** · "
+                        f"{CHAIN_NAME.get(chain, chain)}"
+                    )
+                    st.markdown(f"[{title}]({url})")
+                    st.divider()
+    else:
+        st.info("No CT feed items found. Try again in a moment.")
 
 
 # ══════════════════════════════════════════════════════
