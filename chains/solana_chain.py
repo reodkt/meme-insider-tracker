@@ -8,25 +8,31 @@ import time
 from core.config import SOLANA_RPC
 
 
-def _rpc_call(method, params=None):
-    """Make a JSON-RPC call to Solana."""
+def _rpc_call(method, params=None, retries=3):
+    """Make a JSON-RPC call to Solana with retry + backoff."""
     payload = {
         "jsonrpc": "2.0",
         "id": 1,
         "method": method,
         "params": params or [],
     }
-    try:
-        resp = requests.post(SOLANA_RPC, json=payload, timeout=20)
-        resp.raise_for_status()
-        data = resp.json()
-        if "error" in data:
-            print(f"[Solana RPC] Error: {data['error']}")
-            return None
-        return data.get("result")
-    except Exception as e:
-        print(f"[Solana RPC] Request failed: {e}")
-        return None
+    for attempt in range(retries):
+        try:
+            resp = requests.post(SOLANA_RPC, json=payload, timeout=20)
+            if resp.status_code == 429:
+                wait = 2 ** (attempt + 1)
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            data = resp.json()
+            if "error" in data:
+                return None
+            return data.get("result")
+        except Exception:
+            if attempt < retries - 1:
+                time.sleep(2 ** attempt)
+            continue
+    return None
 
 
 def get_token_supply(mint_address):

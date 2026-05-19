@@ -8,7 +8,8 @@ from web3.exceptions import TransactionNotFound
 from core.config import CHAIN_RPCS
 
 # ERC-20 Transfer event signature
-TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").hex()
+_raw = Web3.keccak(text="Transfer(address,address,uint256)")
+TRANSFER_TOPIC = _raw if isinstance(_raw, str) else "0x" + _raw.hex()
 
 # Minimal ERC-20 ABI
 ERC20_ABI = [
